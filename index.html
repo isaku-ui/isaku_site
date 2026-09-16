@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI Quote Card Maker</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Noto+Serif+JP:wght@400;700&family=M+PLUS+Rounded+1c:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <style>
+        /* =========================================
+           ▼ オリジナルフォントの読み込み設定 ▼
+           同じフォルダにある「custom.ttf」や「custom.otf」などを読み込みます。
+           使いたいフォントのファイル名を custom に変更して置いてください。
+        ========================================= */
+        @font-face {
+            font-family: 'MyCustomFont';
+            src: url('./custom.woff2') format('woff2'),
+                 url('./custom.woff') format('woff'),
+                 url('./custom.ttf') format('truetype'),
+                 url('./custom.otf') format('opentype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        :root {
+            --bg-color: #f4f4f9;
+            --panel-bg: #ffffff;
+            --border: #ddd;
+            --primary: #4a90e2;
+            --primary-hover: #357abd;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Noto Sans JP', sans-serif; background-color: var(--bg-color); }
+        
+        /* Layout */
+        .app-container { display: flex; height: 100vh; overflow: hidden; width: 100vw; }
+        .preview-container { flex: 1; display: flex; justify-content: center; align-items: center; background-color: #2c2c2c; overflow: hidden; position: relative; }
+        .control-panel { width: 400px; background: var(--panel-bg); display: flex; flex-direction: column; border-left: 1px solid var(--border); z-index: 100; }
+        
+        /* プレビュー自動縮小用ラッパー */
+        .card-wrapper { transform-origin: center center; transition: transform 0.1s; }
+
+        /* Card Design */
+        #card {
+            width: 890px; height: 580px;
+            background-color: var(--c-bg, #ffffff); 
+            position: relative; overflow: hidden;
+            border-radius: 24px;
+            padding: 60px 100px;
+            display: flex; flex-direction: column; justify-content: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+
+        /* プレイングカードの角 */
+        .corner { 
+            position: absolute; text-align: center; line-height: 1.1; 
+            font-weight: bold; width: 80px; color: var(--c-deco, #888888);
+        }
+        .corner-rank { font-size: calc(26px * var(--s-corner, 1)); letter-spacing: -1px; margin-bottom: 2px; }
+        .corner-suit { font-size: calc(36px * var(--s-corner, 1)); }
+        .corner-top-left { top: 50px; left: 30px; transform: rotate(-90deg); }
+        .corner-bottom-right { bottom: 50px; right: 30px; transform: rotate(90deg); }
+
+        /* メタデータ */
+        .meta-text { 
+            position: absolute; white-space: nowrap; font-family: 'Noto Sans JP', sans-serif !important; 
+            letter-spacing: 1px;
+            color: var(--c-deco, #888888); font-size: var(--s-meta, 14px);
+        }
+        .meta-horizontal .meta-1 { top: 20px; left: 50%; transform: translateX(-50%); }
+        .meta-horizontal .meta-2 { bottom: 20px; left: 50%; transform: translateX(-50%) rotate(180deg); }
+        .meta-vertical .meta-1 { top: 50%; left: 30px; transform: translate(-50%, -50%) rotate(-90deg); }
+        .meta-vertical .meta-2 { top: 50%; right: 30px; transform: translate(50%, -50%) rotate(90deg); }
+
+        /* コンテンツエリア */
+        .content-area { display: flex; width: 100%; height: 100%; gap: 30px; }
+        .text-box { white-space: pre-wrap; word-wrap: break-word; line-height: 1.6; }
+        .box-ai { color: var(--c-ai, #333333); font-size: var(--s-ai, 52px); }
+        .box-prompt { color: var(--c-prompt, #666666); font-size: var(--s-prompt, 30px); }
+
+        /* テンプレート */
+        .tpl-ai-only { flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+        .tpl-ai-only .box-prompt { display: none; }
+        .tpl-ai-only .box-ai { width: 100%; }
+        .tpl-stacked { flex-direction: column; justify-content: center; align-items: flex-start; }
+        .tpl-stacked .box-prompt { border-left: 4px solid var(--c-prompt-border, #cccccc); padding-left: 15px; margin-bottom: 10px; }
+        .tpl-split { flex-direction: row; justify-content: space-between; align-items: center; }
+        .tpl-split .box-prompt { width: 40%; padding-right: 25px; border-right: 2px dashed var(--c-prompt-border, #cccccc); }
+        .tpl-split .box-ai { width: 55%; }
+
+        /* --- UI Controls --- */
+        .tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+        .tab-btn { flex: 1; padding: 12px 0; border: none; background: #eee; cursor: pointer; font-size: 0.9em; font-weight: bold; transition: 0.2s; }
+        .tab-btn.active { background: var(--panel-bg); border-bottom: 2px solid var(--primary); color: var(--primary); }
+        .tab-content { flex: 1; padding: 20px; overflow-y: auto; display: none; }
+        .tab-content.active { display: block; }
+        
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-size: 0.85em; margin-bottom: 5px; color: #555; font-weight: bold; }
+        input[type="text"], textarea, select { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 0.95em; }
+        textarea { resize: vertical; min-height: 70px; }
+        input[type="color"] { width: 100%; height: 35px; border: none; cursor: pointer; border-radius: 6px; padding: 0; }
+        input[type="range"] { width: 100%; }
+        
+        .btn-export { margin: 15px; padding: 15px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1.1em; font-weight: bold; cursor: pointer; flex-shrink: 0; }
+        .btn-export:hover { background: var(--primary-hover); }
+        .btn-save { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-bottom: 15px; }
+        .template-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 10px; background: #f9f9f9; }
+        .template-actions button { padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8em; margin-left: 5px; }
+        .template-actions button.load { background: var(--primary); color: white; }
+        .template-actions button.danger { background: #dc3545; color: white; }
+
+        /* --- スマホ対応 --- */
+        .side-tab-btn { display: none; }
+        .panel-header { display: none; }
+        
+        @media (max-width: 800px) {
+            .side-tab-btn {
+                display: flex; position: fixed; top: 50%; right: 0; transform: translateY(-50%);
+                padding: 20px 10px; background: var(--primary); color: white; border-radius: 10px 0 0 10px;
+                font-weight: bold; font-size: 1.1em; cursor: pointer; writing-mode: vertical-rl; z-index: 99;
+                box-shadow: -3px 0 10px rgba(0,0,0,0.2); letter-spacing: 2px; text-orientation: upright;
+            }
+            .control-panel {
+                position: fixed; top: 0; right: 0; width: 85%; max-width: 360px; height: 100vh;
+                transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.1, 0.8, 0.3, 1);
+                box-shadow: -5px 0 20px rgba(0,0,0,0.3); border-radius: 20px 0 0 20px;
+                border-left: none; z-index: 100;
+            }
+            .control-panel.open { transform: translateX(0); }
+            
+            .panel-header {
+                display: flex; justify-content: space-between; align-items: center;
+                padding: 15px 20px; background: #f9f9f9; border-bottom: 1px solid var(--border);
+                border-radius: 20px 0 0 0;
+            }
+            .panel-header span { font-weight: bold; font-size: 1.1em; color: #333; }
+            .btn-close { background: none; border: none; font-size: 1.5em; color: #555; cursor: pointer; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="preview-container" id="preview-container">
+        <div class="card-wrapper" id="card-wrapper">
+            <div id="card">
+                <div class="corner corner-top-left">
+                    <div class="corner-rank" id="view-rank-1">GPT</div>
+                    <div class="corner-suit" id="view-suit-1">♠</div>
+                </div>
+                <div class="corner corner-bottom-right">
+                    <div class="corner-rank" id="view-rank-2">GPT</div>
+                    <div class="corner-suit" id="view-suit-2">♠</div>
+                </div>
+
+                <div class="meta-container meta-horizontal" id="view-meta-container">
+                    <div class="meta-text meta-1" id="view-meta-1">GPT-4o / 2024-05-20</div>
+                    <div class="meta-text meta-2" id="view-meta-2">GPT-4o / 2024-05-20</div>
+                </div>
+
+                <div class="content-area tpl-stacked" id="view-content-area">
+                    <div class="text-box box-prompt" id="view-prompt">面白いことを言ってください。</div>
+                    <div class="text-box box-ai" id="view-ai">ふとんがふっとんだ！</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="side-tab-btn" onclick="toggleMenu()">設定 ◀</div>
+
+    <div class="control-panel" id="control-panel">
+        <div class="panel-header">
+            <span>設定パネル</span>
+            <button class="btn-close" onclick="toggleMenu()">✖</button>
+        </div>
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab(0)">テキスト</button>
+            <button class="tab-btn" onclick="switchTab(1)">デザイン</button>
+            <button class="tab-btn" onclick="switchTab(2)">型 / 保存</button>
+        </div>
+
+        <div class="tab-content active" id="tab-0">
+            <div class="form-group">
+                <label>AIの言葉</label>
+                <textarea id="input-ai" oninput="updateText('input-ai', 'view-ai')">ふとんがふっとんだ！</textarea>
+            </div>
+            <div class="form-group" id="group-prompt">
+                <label>プロンプト</label>
+                <textarea id="input-prompt" oninput="updateText('input-prompt', 'view-prompt')">面白いことを言ってください。</textarea>
+            </div>
+            <div class="form-group">
+                <label>メタデータ (縁の文字)</label>
+                <input type="text" id="input-meta" value="GPT-4o / 2024-05-20" oninput="updateMeta()">
+            </div>
+            <div style="display:flex; gap:10px;">
+                <div class="form-group" style="flex:1;">
+                    <label>記号</label>
+                    <input type="text" id="input-suit" value="♠" maxlength="2" oninput="updateCorners()">
+                </div>
+                <div class="form-group" style="flex:2;">
+                    <label>文字 (4文字迄)</label>
+                    <input type="text" id="input-rank" value="GPT" maxlength="4" oninput="updateCorners()">
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="tab-1">
+            <div class="form-group">
+                <label>フォント</label>
+                <select id="select-font" onchange="updateStyle()">
+                    <!-- ★ ここにオリジナルフォントの選択肢を追加 ★ -->
+                    <option value="'MyCustomFont', sans-serif">📁 カスタムフォント (custom.ttf)</option>
+                    <option value="'Noto Sans JP', sans-serif">ゴシック (Noto Sans)</option>
+                    <option value="'Noto Serif JP', serif">明朝体 (Noto Serif)</option>
+                    <option value="'M PLUS Rounded 1c', sans-serif">丸ゴシック (M PLUS)</option>
+                </select>
+                <p style="font-size: 0.7em; color: #888; margin-top: 5px;">
+                    ※カスタムフォントを使うには、同じフォルダに custom.ttf 等を配置してください。
+                </p>
+            </div>
+            
+            <div class="form-group">
+                <label>カード 背景色</label>
+                <input type="color" id="color-bg" value="#ffffff" oninput="updateStyle()">
+            </div>
+            
+            <hr style="margin:20px 0; border:none; border-top:1px solid #ddd;">
+            
+            <div style="display:flex; gap:10px;">
+                <div class="form-group" style="flex:1;">
+                    <label>AIの言葉 色</label>
+                    <input type="color" id="color-ai" value="#333333" oninput="updateStyle()">
+                </div>
+                <div class="form-group" style="flex:2;">
+                    <label>AIの言葉 サイズ</label>
+                    <input type="range" id="size-ai" min="20" max="120" value="52" oninput="updateStyle()">
+                </div>
+            </div>
+            
+            <div style="display:flex; gap:10px;">
+                <div class="form-group" style="flex:1;">
+                    <label>プロンプト 色</label>
+                    <input type="color" id="color-prompt" value="#666666" oninput="updateStyle()">
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label>プロンプト 枠線色</label>
+                    <input type="color" id="color-prompt-border" value="#cccccc" oninput="updateStyle()">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>プロンプト サイズ</label>
+                <input type="range" id="size-prompt" min="15" max="80" value="30" oninput="updateStyle()">
+            </div>
+
+            <hr style="margin:20px 0; border:none; border-top:1px solid #ddd;">
+            
+            <div class="form-group">
+                <label>装飾(角/縁) 色</label>
+                <input type="color" id="color-deco" value="#888888" oninput="updateStyle()">
+            </div>
+            <div style="display:flex; gap:10px;">
+                <div class="form-group" style="flex:1;">
+                    <label>角 サイズ(%)</label>
+                    <input type="range" id="size-corner" min="50" max="200" value="100" oninput="updateStyle()">
+                </div>
+                <div class="form-group" style="flex:1;">
+                    <label>縁 サイズ</label>
+                    <input type="range" id="size-meta" min="10" max="40" value="14" oninput="updateStyle()">
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="tab-2">
+            <div class="form-group">
+                <label>テキストのレイアウト (型)</label>
+                <select id="select-template" onchange="updateLayout()">
+                    <option value="tpl-ai-only">【1枠】AIの言葉のみ (中央)</option>
+                    <option value="tpl-stacked" selected>【2枠】プロンプト(上) ＋ AI(下)</option>
+                    <option value="tpl-split">【2枠】プロンプト(左) ＋ AI(右)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>メタデータの配置</label>
+                <select id="select-meta-pos" onchange="updateLayout()">
+                    <option value="meta-horizontal">水平 (上辺・下辺)</option>
+                    <option value="meta-vertical">垂直 (左辺・右辺)</option>
+                </select>
+            </div>
+            
+            <hr style="margin:25px 0; border:none; border-top:1px solid #ddd;">
+            <label style="font-size: 1.1em;">🎨 マイデザイン保存</label>
+            <p style="font-size: 0.75em; color: #666; margin-bottom: 10px;">現在の色や型を端末に保存します。</p>
+            <button class="btn-save" onclick="saveTemplate()">現在のデザインを保存する</button>
+            <div id="template-list"></div>
+        </div>
+
+        <button class="btn-export" onclick="exportPNG()">📸 画像として保存</button>
+    </div>
+</div>
+
+<script>
+    function resizeCard() {
+        const container = document.getElementById('preview-container');
+        const wrapper = document.getElementById('card-wrapper');
+        const paddingX = 40; const paddingY = 60;
+        const availWidth = container.clientWidth - paddingX;
+        const availHeight = container.clientHeight - paddingY;
+        const scale = Math.min(availWidth / 890, availHeight / 580, 1);
+        wrapper.style.transform = `scale(${scale})`;
+    }
+    window.addEventListener('resize', resizeCard);
+
+    let isMenuOpen = false;
+    function toggleMenu() {
+        const panel = document.getElementById('control-panel');
+        isMenuOpen = !isMenuOpen;
+        if(isMenuOpen) panel.classList.add('open');
+        else panel.classList.remove('open');
+    }
+
+    function switchTab(index) {
+        document.querySelectorAll('.tab-btn').forEach((btn, i) => btn.classList.toggle('active', i === index));
+        document.querySelectorAll('.tab-content').forEach((content, i) => content.classList.toggle('active', i === index));
+    }
+    function updateText(inputId, targetId) { document.getElementById(targetId).innerText = document.getElementById(inputId).value; }
+    function updateMeta() {
+        const val = document.getElementById('input-meta').value;
+        document.getElementById('view-meta-1').innerText = val; document.getElementById('view-meta-2').innerText = val;
+    }
+    function updateCorners() {
+        const suit = document.getElementById('input-suit').value;
+        const rank = document.getElementById('input-rank').value;
+        document.getElementById('view-suit-1').innerText = suit; document.getElementById('view-suit-2').innerText = suit;
+        document.getElementById('view-rank-1').innerText = rank; document.getElementById('view-rank-2').innerText = rank;
+    }
+    function updateLayout() {
+        const tpl = document.getElementById('select-template').value;
+        document.getElementById('view-content-area').className = 'content-area ' + tpl;
+        document.getElementById('group-prompt').style.display = (tpl === 'tpl-ai-only') ? 'none' : 'block';
+        document.getElementById('view-meta-container').className = 'meta-container ' + document.getElementById('select-meta-pos').value;
+    }
+    function updateStyle() {
+        const card = document.getElementById('card');
+        // CSS変数でフォントや色を適用
+        card.style.fontFamily = document.getElementById('select-font').value;
+        card.style.setProperty('--c-bg', document.getElementById('color-bg').value);
+        card.style.setProperty('--c-ai', document.getElementById('color-ai').value);
+        card.style.setProperty('--s-ai', document.getElementById('size-ai').value + 'px');
+        card.style.setProperty('--c-prompt', document.getElementById('color-prompt').value);
+        card.style.setProperty('--c-prompt-border', document.getElementById('color-prompt-border').value);
+        card.style.setProperty('--s-prompt', document.getElementById('size-prompt').value + 'px');
+        card.style.setProperty('--c-deco', document.getElementById('color-deco').value);
+        card.style.setProperty('--s-corner', document.getElementById('size-corner').value / 100);
+        card.style.setProperty('--s-meta', document.getElementById('size-meta').value + 'px');
+    }
+
+    async function exportPNG() {
+        const wrapper = document.getElementById('card-wrapper');
+        const card = document.getElementById('card');
+        const originalTransform = wrapper.style.transform;
+        
+        // フォントの適用を確実にするため、少し待ってから画像化
+        wrapper.style.transform = 'scale(1)';
+        await document.fonts.ready;
+        await new Promise(r => setTimeout(r, 200));
+        
+        html2canvas(card, { scale: 2, backgroundColor: null }).then(canvas => {
+            const link = document.createElement('a');
+            link.download = 'ai-quote-card.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            wrapper.style.transform = originalTransform;
+        });
+    }
+
+    const STYLE_PROPS = ['color-bg', 'color-ai', 'size-ai', 'color-prompt', 'color-prompt-border', 'size-prompt', 'color-deco', 'size-corner', 'size-meta', 'select-font', 'select-template', 'select-meta-pos'];
+    const TEXT_PROPS = ['input-suit', 'input-rank', 'input-meta'];
+
+    function saveTemplate() {
+        const name = prompt("デザインに名前をつけてください", "お気に入り 1");
+        if(!name) return;
+        const data = { id: Date.now().toString(), name: name, styles: {}, texts: {} };
+        STYLE_PROPS.forEach(id => data.styles[id] = document.getElementById(id).value);
+        TEXT_PROPS.forEach(id => data.texts[id] = document.getElementById(id).value);
+        let saved = JSON.parse(localStorage.getItem('ai_card_templates_v2') || '[]');
+        saved.push(data);
+        localStorage.setItem('ai_card_templates_v2', JSON.stringify(saved));
+        renderTemplateList();
+    }
+
+    function loadTemplate(id) {
+        let saved = JSON.parse(localStorage.getItem('ai_card_templates_v2') || '[]');
+        const data = saved.find(t => t.id === id);
+        if(!data) return;
+
+        STYLE_PROPS.forEach(prop => { if(data.styles[prop]) document.getElementById(prop).value = data.styles[prop]; });
+        TEXT_PROPS.forEach(prop => { if(data.texts[prop]) document.getElementById(prop).value = data.texts[prop]; });
+        
+        updateStyle(); updateLayout(); updateCorners(); updateMeta();
+    }
+
+    function deleteTemplate(id) {
+        if(!confirm("本当に削除しますか？")) return;
+        let saved = JSON.parse(localStorage.getItem('ai_card_templates_v2') || '[]');
+        localStorage.setItem('ai_card_templates_v2', JSON.stringify(saved.filter(t => t.id !== id)));
+        renderTemplateList();
+    }
+
+    function renderTemplateList() {
+        const list = document.getElementById('template-list');
+        let saved = JSON.parse(localStorage.getItem('ai_card_templates_v2') || '[]');
+        list.innerHTML = saved.length === 0 ? '<p style="color:#777; font-size:0.85em; text-align:center;">保存されたデータはありません</p>' : '';
+        saved.forEach(t => {
+            list.innerHTML += `
+                <div class="template-item">
+                    <div class="template-info">${t.name}</div>
+                    <div class="template-actions">
+                        <button class="load" onclick="loadTemplate('${t.id}')">読込</button>
+                        <button class="danger" onclick="deleteTemplate('${t.id}')">削除</button>
+                    </div>
+                </div>`;
+        });
+    }
+
+    updateStyle(); updateLayout(); updateCorners(); renderTemplateList();
+    setTimeout(resizeCard, 100); 
+</script>
+</body>
+</html>
