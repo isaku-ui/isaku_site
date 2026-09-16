@@ -11,15 +11,11 @@
     <style>
         /* =========================================
            ▼ オリジナルフォントの読み込み設定 ▼
-           同じフォルダにある「custom.ttf」や「custom.otf」などを読み込みます。
-           使いたいフォントのファイル名を custom に変更して置いてください。
+           同じフォルダ（main）にある marshmallowpopheart.otf を読み込みます
         ========================================= */
         @font-face {
             font-family: 'MyCustomFont';
-            src: url('./custom.woff2') format('woff2'),
-                 url('./custom.woff') format('woff'),
-                 url('./custom.ttf') format('truetype'),
-                 url('./custom.otf') format('opentype');
+            src: url('./marshmallowpopheart.otf') format('opentype');
             font-weight: normal;
             font-style: normal;
             font-display: swap;
@@ -212,15 +208,12 @@
             <div class="form-group">
                 <label>フォント</label>
                 <select id="select-font" onchange="updateStyle()">
-                    <!-- ★ ここにオリジナルフォントの選択肢を追加 ★ -->
-                    <option value="'MyCustomFont', sans-serif">📁 カスタムフォント (custom.ttf)</option>
+                    <!-- ★ ここが Marshmallow Pop Heart になっています ★ -->
+                    <option value="'MyCustomFont', sans-serif">📁 Marshmallow Pop Heart</option>
                     <option value="'Noto Sans JP', sans-serif">ゴシック (Noto Sans)</option>
                     <option value="'Noto Serif JP', serif">明朝体 (Noto Serif)</option>
                     <option value="'M PLUS Rounded 1c', sans-serif">丸ゴシック (M PLUS)</option>
                 </select>
-                <p style="font-size: 0.7em; color: #888; margin-top: 5px;">
-                    ※カスタムフォントを使うには、同じフォルダに custom.ttf 等を配置してください。
-                </p>
             </div>
             
             <div class="form-group">
@@ -345,7 +338,6 @@
     }
     function updateStyle() {
         const card = document.getElementById('card');
-        // CSS変数でフォントや色を適用
         card.style.fontFamily = document.getElementById('select-font').value;
         card.style.setProperty('--c-bg', document.getElementById('color-bg').value);
         card.style.setProperty('--c-ai', document.getElementById('color-ai').value);
@@ -363,7 +355,6 @@
         const card = document.getElementById('card');
         const originalTransform = wrapper.style.transform;
         
-        // フォントの適用を確実にするため、少し待ってから画像化
         wrapper.style.transform = 'scale(1)';
         await document.fonts.ready;
         await new Promise(r => setTimeout(r, 200));
@@ -426,6 +417,7 @@
         });
     }
 
+    // 初回起動時の描画
     updateStyle(); updateLayout(); updateCorners(); renderTemplateList();
     setTimeout(resizeCard, 100); 
 </script>
